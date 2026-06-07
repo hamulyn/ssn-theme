@@ -2,246 +2,94 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Skyze — SSN Theme</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<title>Skyze DEBUG</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: transparent;
-    font-family: 'Inter', sans-serif;
-    overflow: hidden;
-  }
-
-  #chat-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px;
-    width: 100%;
-  }
-
-  .msg-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 7px;
-    animation: slideIn 0.25s ease forwards;
-    opacity: 0;
-  }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .platform-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    margin-top: 9px;
-  }
-
-  .bubble {
-    background: rgba(255,255,255,0.08);
-    border: 0.5px solid rgba(255,255,255,0.13);
-    border-radius: 10px;
-    padding: 6px 11px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 6px;
-    max-width: 100%;
-  }
-
-  .username {
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .badge {
-    font-size: 9px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 4px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    align-self: center;
-    flex-shrink: 0;
-  }
-
-  .msg-text {
-    font-size: 13px;
-    color: rgba(255,255,255,0.83);
-    line-height: 1.45;
-    word-break: break-word;
-  }
-
-  .src-twitch    { background: #9146FF; }
-  .src-youtube   { background: #FF0000; }
-  .src-kick      { background: #53FC18; }
-  .src-tiktok    { background: #69C9D0; }
-  .src-facebook  { background: #1877F2; }
-  .src-instagram { background: #E1306C; }
-  .src-default   { background: rgba(255,255,255,0.3); }
-
-  .name-twitch    { color: #bf94ff; }
-  .name-youtube   { color: #ff6b6b; }
-  .name-kick      { color: #7fff57; }
-  .name-tiktok    { color: #69C9D0; }
-  .name-facebook  { color: #5b9cf6; }
-  .name-instagram { color: #f06292; }
-  .name-default   { color: rgba(255,255,255,0.9); }
-
-  .badge-mod { background: rgba(83,252,24,0.15);  color: #53FC18; }
-  .badge-sub { background: rgba(145,70,255,0.2);  color: #b98aff; }
-  .badge-vip { background: rgba(255,170,0,0.18);  color: #ffcc55; }
-
-  .bubble.featured {
-    background: rgba(255,255,255,0.13);
-    border-color: rgba(255,255,255,0.22);
-  }
-
-  #status {
-    position: fixed;
-    top: 6px; left: 8px;
-    font-size: 10px;
-    color: rgba(255,255,255,0.4);
-    font-family: monospace;
-    pointer-events: none;
-    z-index: 99;
-  }
+  body { background: #111; color: #eee; font-family: monospace; font-size: 12px; padding: 10px; }
+  #status { color: #facc15; margin-bottom: 8px; font-size: 13px; font-weight: bold; }
+  #log { display: flex; flex-direction: column; gap: 4px; }
+  .entry { background: #1e1e1e; border-left: 3px solid #444; padding: 4px 8px; border-radius: 4px; word-break: break-all; }
+  .entry.msg  { border-color: #22c55e; color: #86efac; }
+  .entry.err  { border-color: #ef4444; color: #fca5a5; }
+  .entry.info { border-color: #3b82f6; color: #93c5fd; }
+  .entry.warn { border-color: #f59e0b; color: #fcd34d; }
 </style>
 </head>
 <body>
-
-<div id="status">aguardando…</div>
-<div id="chat-list"></div>
-
+<div id="status">iniciando…</div>
+<div id="log"></div>
 <script>
-  /* ── CONFIG ── */
-  const MAX_MESSAGES = 30;
-  const FADE_OUT_MS  = 0;
-  /* ─────────── */
-
-  const list     = document.getElementById('chat-list');
+  const params  = new URLSearchParams(location.search);
+  const session = params.get('session') || '';
+  const logEl   = document.getElementById('log');
   const statusEl = document.getElementById('status');
-  const params   = new URLSearchParams(location.search);
-  const session  = params.get('session') || '';
 
-  /* O app standalone usa localserver (ws://127.0.0.1:3000).
-     Se a URL tiver &localserver, usa local. Caso contrário, usa o relay externo. */
-  const isLocal  = params.has('localserver');
-  const WS_URL   = isLocal
-    ? 'ws://127.0.0.1:3000'
-    : 'wss://io.socialstream.ninja:443';
-
-  function srcClass(src) {
-    if (!src) return 'default';
-    src = src.toLowerCase();
-    if (src.includes('twitch'))    return 'twitch';
-    if (src.includes('youtube'))   return 'youtube';
-    if (src.includes('kick'))      return 'kick';
-    if (src.includes('tiktok'))    return 'tiktok';
-    if (src.includes('facebook'))  return 'facebook';
-    if (src.includes('instagram')) return 'instagram';
-    return 'default';
+  function log(text, type='info') {
+    const d = document.createElement('div');
+    d.className = `entry ${type}`;
+    d.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    logEl.prepend(d);
+    if (logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
   }
 
-  function addMessage(data) {
-    const name   = data.name || data.chatname || 'Anon';
-    const text   = data.chatmessage || data.text || '';
-    const src    = srcClass(data.type || data.service || data.platform || '');
-    const isMod  = data.hasModerator || data.mod;
-    const isSub  = data.hasMembership || data.subscriber || data.sub;
-    const isVip  = data.hasVIP || data.vip;
-    const isFeat = data.featured;
+  log(`URL completa: ${location.href}`, 'info');
+  log(`Session: "${session}"`, session ? 'info' : 'err');
+  log(`Protocolo: ${location.protocol}`, 'info');
 
-    if (!text.trim()) return;
-
-    const row = document.createElement('div');
-    row.className = 'msg-row';
-
-    const dot = document.createElement('div');
-    dot.className = `platform-dot src-${src}`;
-
-    const bubble = document.createElement('div');
-    bubble.className = `bubble${isFeat ? ' featured' : ''}`;
-
-    const nameEl = document.createElement('span');
-    nameEl.className = `username name-${src}`;
-    nameEl.textContent = name;
-    bubble.appendChild(nameEl);
-
-    if (isMod) { const b = document.createElement('span'); b.className='badge badge-mod'; b.textContent='mod'; bubble.appendChild(b); }
-    if (isSub) { const b = document.createElement('span'); b.className='badge badge-sub'; b.textContent='sub'; bubble.appendChild(b); }
-    if (isVip) { const b = document.createElement('span'); b.className='badge badge-vip'; b.textContent='vip'; bubble.appendChild(b); }
-
-    const msgEl = document.createElement('span');
-    msgEl.className = 'msg-text';
-    msgEl.textContent = text;
-    bubble.appendChild(msgEl);
-
-    row.appendChild(dot);
-    row.appendChild(bubble);
-    list.appendChild(row);
-
-    while (list.children.length > MAX_MESSAGES) list.removeChild(list.firstChild);
-
-    if (FADE_OUT_MS > 0) {
-      setTimeout(() => {
-        row.style.transition = 'opacity 0.4s';
-        row.style.opacity = '0';
-        setTimeout(() => row.remove(), 420);
-      }, FADE_OUT_MS);
-    }
-  }
-
-  function handleRaw(raw) {
-    try {
-      const d   = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      const msg = (d && d.data) ? d.data : d;
-      if (msg && (msg.chatmessage || msg.text)) addMessage(msg);
-    } catch (_) {}
-  }
-
-  window.addEventListener('message', e => handleRaw(e.data));
+  window.addEventListener('message', e => {
+    log(`postMessage: ${JSON.stringify(e.data)}`, 'msg');
+  });
 
   if (!session) {
-    statusEl.textContent = '⚠ sem ?session=ID na URL';
+    statusEl.textContent = '⚠ sem session ID';
+    log('Adicione ?session=SEU_ID na URL', 'err');
   } else {
-    let ws, retryDelay = 2000;
+    /* Testa WSS externo em todos os canais */
+    statusEl.textContent = 'testando WSS externo (canais 1-4)…';
 
-    function connect() {
-      statusEl.textContent = `conectando… (${isLocal ? 'local' : 'relay'})`;
-      ws = new WebSocket(WS_URL);
-
+    [1,2,3,4].forEach(ch => {
+      const ws = new WebSocket('wss://io.socialstream.ninja:443');
       ws.onopen = () => {
-        if (!isLocal) {
-          ws.send(JSON.stringify({ join: session, in: 4, out: 4 }));
-        }
-        statusEl.textContent = `✓ ${isLocal ? 'localserver' : session.slice(0,6)+'…'}`;
-        retryDelay = 2000;
+        ws.send(JSON.stringify({ join: session, in: ch, out: ch }));
+        log(`WSS externo canal ${ch} → conectado`, 'info');
       };
-
       ws.onmessage = e => {
-        if (!e.data || e.data === 'pong' || e.data === 'ping') return;
-        handleRaw(e.data);
+        if (!e.data || e.data === 'pong') return;
+        log(`✅ WSS canal ${ch} RECEBEU: ${e.data}`, 'msg');
+        statusEl.textContent = `✅ recebendo no canal ${ch}!`;
       };
+      ws.onclose = (ev) => log(`WSS canal ${ch} fechou (code: ${ev.code})`, 'warn');
+      ws.onerror = ()  => log(`WSS canal ${ch} ERRO`, 'err');
+    });
 
-      ws.onclose = () => {
-        statusEl.textContent = `reconectando…`;
-        setTimeout(connect, retryDelay);
-        retryDelay = Math.min(retryDelay * 1.5, 15000);
+    /* Testa SSE */
+    log('Testando SSE…', 'info');
+    const es = new EventSource(`https://io.socialstream.ninja/sse/${session}`);
+    es.onopen = () => log('SSE conectado', 'info');
+    es.onmessage = e => {
+      if (!e.data || e.data === 'ping') return;
+      log(`✅ SSE RECEBEU: ${e.data}`, 'msg');
+      statusEl.textContent = '✅ SSE recebendo!';
+    };
+    es.onerror = () => log('SSE erro/reconectando', 'warn');
+
+    /* Testa localserver ws://127.0.0.1:3000 */
+    log('Testando localserver 127.0.0.1:3000…', 'info');
+    try {
+      const wsLocal = new WebSocket('ws://127.0.0.1:3000');
+      wsLocal.onopen = () => {
+        log('✅ localserver CONECTOU!', 'msg');
+        statusEl.textContent = '✅ localserver ativo!';
       };
-
-      ws.onerror = () => ws.close();
+      wsLocal.onmessage = e => {
+        if (!e.data || e.data === 'pong') return;
+        log(`✅ localserver RECEBEU: ${e.data}`, 'msg');
+      };
+      wsLocal.onerror = () => log('localserver 3000 → bloqueado ou inativo', 'err');
+      wsLocal.onclose = () => log('localserver 3000 fechou', 'warn');
+    } catch(e) {
+      log(`localserver exception: ${e.message}`, 'err');
     }
-
-    connect();
   }
 </script>
 </body>
